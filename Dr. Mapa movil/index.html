@@ -1,0 +1,1099 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <!-- Ajusta el viewport según tus necesidades. 
+         Puedes usar initial-scale=1 para un zoom normal, 
+         o conservar 0.5 si así lo deseas. -->
+    <meta name="viewport" content="width=device-width, initial-scale=0.5, minimum-scale=0.5, user-scalable=yes">
+    
+    <title>Dr. Mapa Móvil</title>
+
+    <!-- MANIFEST (PWA) -->
+    <link rel="manifest" href="manifest.json">
+    <!-- Tema de la barra en navegadores Android (opcional) -->
+    <meta name="theme-color" content="#007bff">
+
+    <!-- CONFIGURACIÓN PARA iOS (PWA en iPad/iPhone) -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <!-- "black" = barra de estado negra. 
+         "black-translucent" = barra de estado negra pero translúcida -->
+    <meta name="apple-mobile-web-app-status-bar-style" content="black">
+    <meta name="apple-mobile-web-app-title" content="Dr. Mapa Móvil">
+
+    <!-- ÍCONO PARA iOS -->
+    <!-- Ajusta tamaños e imágenes según tus archivos reales -->
+    <link rel="apple-touch-icon" sizes="192x192" href="icon-192.png">
+    <link rel="apple-touch-icon" sizes="512x512" href="icon-512.png">
+
+    <!-- Tus estilos originales -->
+    <style>
+      html, body {
+        margin: 0;
+        padding: 0;
+        font-family: 'Segoe UI', Arial, sans-serif;
+        background-color: #f9f9f9;
+        height: 100%;
+        overflow: hidden;
+      }
+      #mindmap-container {
+        position: absolute;
+        top: 0; left: 0; right: 0; bottom: 0;
+        padding: 10px;
+        overflow: auto;
+        background-color: #fff;
+      }
+      #mindmap-content {
+        position: absolute;
+        left: 0;
+        top: 0;
+      }
+      svg {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+        overflow: visible;
+      }
+      svg path {
+        stroke-width: 4;
+        fill: none;
+      }
+      #mobile-toolbar {
+        position: absolute;
+        top: 10px;
+        z-index: 10001;
+        white-space: nowrap;
+      }
+      #mobile-toolbar button {
+        margin-left: 5px;
+        padding: 8px 12px;
+        background-color: #007bff;
+        color: #fff;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+      }
+      #markdown-editor {
+        position: absolute;
+        top: 60px;
+        right: 10px;
+        width: 400px;
+        height: 300px;
+        border: 1px solid #ccc;
+        background-color: #fff;
+        box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        overflow: hidden;
+        display: none;
+        z-index: 10000;
+        resize: both;
+      }
+      #markdown-editor header {
+        background-color: #f0f0f0;
+        padding: 5px;
+        cursor: default;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      #markdown-editor header .close-btn {
+        cursor: pointer;
+        font-size: 14px;
+        border: none;
+        background: none;
+      }
+      #markdown-editor textarea {
+        width: 100%;
+        height: calc(100% - 30px);
+        border: none;
+        padding: 10px;
+        box-sizing: border-box;
+        resize: none;
+        font-family: 'Segoe UI', Arial, sans-serif;
+        font-size: 16px;
+        overflow: auto;
+      }
+      #highlight-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 0;
+        background-color: rgba(0,128,255,0.2);
+        pointer-events: none;
+        z-index: 10001;
+        transition: height 0.3s ease-out, opacity 0.3s ease-out;
+        opacity: 0;
+      }
+      #highlight-overlay.active {
+        opacity: 1;
+      }
+      .node {
+        position: absolute;
+        z-index: 10;
+        border-radius: 20px;
+        padding: 10px 20px;
+        background-color: #ffffff;
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        font-weight: 600;
+        white-space: normal;
+        word-wrap: break-word;
+        max-width: 220px;
+        text-align: center;
+        cursor: pointer;
+        outline: none;
+        transition: border 0.2s ease, opacity 0.2s ease;
+        -webkit-user-select: none;
+        user-select: none;
+        -webkit-touch-callout: none;
+        touch-action: manipulation; /* Previene zoom en móviles */
+      }
+      .dragging {
+        opacity: 0.6;
+        z-index: 1000;
+      }
+      .color-1 { background-color: #fbebfe; border-left: 4px solid #be48d1; }
+      .color-2 { background-color: #e5f0fd; border-left: 4px solid #0046f5; }
+      .color-3 { background-color: #e5fdf2; border-left: 4px solid #4faf65; }
+      .color-4 { background-color: #fff8df; border-left: 4px solid #f7c346; }
+      .color-5 { background-color: #f9d9ee; border-left: 4px solid #6e2761; }
+      .color-6 { background-color: #f4cacf; border-left: 4px solid #ed3b54; }
+      .color-7 { background-color: #e4fdf7; border-left: 4px solid #4bafa0; }
+      .color-8 { background-color: #fdf3e5; border-left: 4px solid #fc7416; }
+      .color-9 { background-color: #d5d6ff; border-left: 4px solid #4449ff; }
+      .color-10 { background-color: #eaeaea; border-left: 4px solid #9b9b9b; }
+      .measurement-container {
+        position: absolute;
+        visibility: hidden;
+        left: -9999px;
+        top: -9999px;
+      }
+      #context-menu {
+        position: absolute;
+        display: none;
+        background: #fff;
+        border: 1px solid #ccc;
+        border-radius: 6px;
+        padding: 8px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+        z-index: 9999;
+      }
+      #context-menu button {
+        margin: 4px;
+        padding: 8px 12px;
+        cursor: pointer;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        background: #f9f9f9;
+        font-size: 16px;
+      }
+      #context-menu button:hover {
+        background: #eee;
+      }
+      .edit-input {
+        width: 100%;
+        box-sizing: border-box;
+        font-family: inherit;
+        font-size: 16px;
+        font-weight: 600;
+        text-align: center;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        -webkit-user-select: text;
+        user-select: text;
+        -webkit-touch-callout: text;
+      }
+    </style>
+  </head>
+  
+  <body>
+    <div id="mindmap-container">
+      <div id="mindmap-content"></div>
+      <svg id="mindmap-lines"></svg>
+      <div id="mobile-toolbar">
+        <button id="toggle-editor-btn">Mostrar Editor</button>
+        <button id="undo-btn">Deshacer</button>
+        <button id="redo-btn">Rehacer</button>
+      </div>
+      <div id="markdown-editor">
+        <header>
+          <span>Editor Markdown</span>
+          <button class="close-btn" id="close-editor-btn">X</button>
+        </header>
+        <textarea id="markdown-input" placeholder="Escribe tu Markdown aquí..."></textarea>
+        <div id="highlight-overlay"></div>
+      </div>
+    </div>
+    <div class="measurement-container" id="measurement"></div>
+    <div id="context-menu">
+      <button id="btn-edit">Editar texto</button>
+      <button id="btn-add">+</button>
+      <button id="btn-remove">–</button>
+      <button id="btn-promote">↑</button>
+    </div>
+    <script>
+      let nodeIdCounter = 0;
+      function generateId() { return ++nodeIdCounter; }
+
+      let rootData = null;
+      let activeNode = null;
+      let markdownMapping = {};
+
+      const mindmapContainer = document.getElementById('mindmap-container');
+      const mindmapContent = document.getElementById('mindmap-content');
+      const mindmapLines = document.getElementById('mindmap-lines');
+      const markdownInput = document.getElementById('markdown-input');
+      const highlightOverlay = document.getElementById('highlight-overlay');
+      const contextMenu = document.getElementById('context-menu');
+
+      let touchDragTimer = null;
+      let isTouchDragging = false;
+      let dragNode = null;
+      let dragOffset = { x: 0, y: 0 };
+      let lastScrollTouch = { x: 0, y: 0 };
+      let isScrolling = false;
+
+      // Variables para manejar doble toque
+      let lastClickTime = 0;
+      let lastClickedNode = null;
+      const DOUBLE_CLICK_DELAY = 200; // 200ms para toques rápidos
+
+      let db;
+      const DB_NAME = 'MindmapDB';
+      const STORE_NAME = 'undoStackStore';
+      const DB_VERSION = 1;
+      let undoStack = [];
+      let redoStack = [];
+      let isUpdatingFromMap = false;
+
+      let contextMenuOpen = false;
+      let contextMenuNode = null;
+
+      const editorWindow = document.getElementById('markdown-editor');
+      const toggleBtn = document.getElementById('toggle-editor-btn');
+      const closeEditorBtn = document.getElementById('close-editor-btn');
+
+      toggleBtn.addEventListener('click', () => {
+        editorWindow.style.display = 'block';
+        markdownInput.focus();
+      });
+      closeEditorBtn.addEventListener('click', () => {
+        editorWindow.style.display = 'none';
+      });
+      closeEditorBtn.addEventListener('touchend', (e) => {
+        e.stopPropagation();
+        editorWindow.style.display = 'none';
+      });
+
+      function openContextMenuForNode(node) {
+        contextMenu.style.display = 'block';
+        contextMenuOpen = true;
+        contextMenuNode = node;
+        requestAnimationFrame(() => positionContextMenu(node));
+      }
+      function closeContextMenu() {
+        contextMenu.style.display = 'none';
+        contextMenuOpen = false;
+        contextMenuNode = null;
+      }
+      document.addEventListener('click', () => { closeContextMenu(); });
+      function positionContextMenu(node) {
+        if (!node) return;
+        const nodeEl = nodeElementMap.get(node);
+        if (!nodeEl) return;
+        if (contextMenu.style.display !== 'block') return;
+        const rect = nodeEl.getBoundingClientRect();
+        const left = rect.left + window.scrollX + (rect.width / 2) - (contextMenu.offsetWidth / 2);
+        const top = rect.top + window.scrollY - contextMenu.offsetHeight - 10;
+        contextMenu.style.left = left + 'px';
+        contextMenu.style.top = top + 'px';
+      }
+      window.addEventListener('resize', () => {
+        if (contextMenuOpen && contextMenuNode) positionContextMenu(contextMenuNode);
+      });
+
+      async function initDB() {
+        return new Promise((resolve, reject) => {
+          const request = indexedDB.open(DB_NAME, DB_VERSION);
+          request.onerror = () => reject(request.error);
+          request.onsuccess = () => { db = request.result; resolve(db); };
+          request.onupgradeneeded = (event) => {
+            const db = event.target.result;
+            db.createObjectStore(STORE_NAME, { keyPath: 'id', autoIncrement: true });
+          };
+        });
+      }
+      async function saveUndoStack(stack) {
+        const transaction = db.transaction([STORE_NAME], 'readwrite');
+        const store = transaction.objectStore(STORE_NAME);
+        await new Promise((resolve, reject) => {
+          const clearRequest = store.clear();
+          clearRequest.onsuccess = resolve;
+          clearRequest.onerror = () => reject(clearRequest.error);
+        });
+        await new Promise((resolve, reject) => {
+          const addRequest = store.add({ stack: stack });
+          addRequest.onsuccess = resolve;
+          addRequest.onerror = () => reject(addRequest.error);
+        });
+      }
+      async function loadUndoStack() {
+        const transaction = db.transaction([STORE_NAME], 'readonly');
+        const store = transaction.objectStore(STORE_NAME);
+        return new Promise((resolve, reject) => {
+          const getRequest = store.getAll();
+          getRequest.onsuccess = () => {
+            const result = getRequest.result;
+            if (result.length > 0 && result[0].stack) resolve(result[0].stack);
+            else resolve([]);
+          };
+          getRequest.onerror = () => reject(getRequest.error);
+        });
+      }
+      (async () => {
+        try {
+          await initDB();
+          undoStack = await loadUndoStack();
+        } catch (e) {
+          console.error('Error al inicializar IndexedDB o cargar undoStack:', e);
+          undoStack = [];
+        }
+      })();
+
+      function cloneTree(node) {
+        let newNode = { id: node.id, text: node.text, children: [] };
+        if (node.x !== undefined) newNode.x = node.x;
+        if (node.y !== undefined) newNode.y = node.y;
+        if (node.width !== undefined) newNode.width = node.width;
+        if (node.height !== undefined) newNode.height = node.height;
+        if (node.subtreeColor !== undefined) newNode.subtreeColor = node.subtreeColor;
+        if (node.isTable !== undefined) newNode.isTable = node.isTable;
+        if (node.html !== undefined) newNode.html = node.html;
+        node.children.forEach(child => {
+          newNode.children.push(cloneTree(child));
+        });
+        return newNode;
+      }
+      async function pushUndoState() {
+        let cloned = cloneTree(rootData);
+        if (undoStack.length >= 10) undoStack.shift();
+        undoStack.push(cloned);
+        redoStack = [];
+        try { await saveUndoStack(undoStack); }
+        catch (e) { console.error('No se pudo guardar undoStack en IndexedDB:', e); }
+      }
+      async function undo() {
+        if (undoStack.length > 0) {
+          redoStack.push(cloneTree(rootData));
+          rootData = undoStack.pop();
+          try { await saveUndoStack(undoStack); }
+          catch (e) { console.error('No se pudo actualizar undoStack en IndexedDB:', e); }
+          setParentRefs(rootData, null);
+          renderAll();
+        }
+      }
+      async function redo() {
+        if (redoStack.length > 0) {
+          undoStack.push(cloneTree(rootData));
+          rootData = redoStack.pop();
+          try { await saveUndoStack(undoStack); }
+          catch (e) { console.error('No se pudo actualizar undoStack en IndexedDB:', e); }
+          setParentRefs(rootData, null);
+          renderAll();
+        }
+      }
+      document.getElementById('undo-btn').addEventListener('click', async (e) => {
+        e.stopPropagation();
+        await undo();
+      });
+      document.getElementById('redo-btn').addEventListener('click', async (e) => {
+        e.stopPropagation();
+        await redo();
+      });
+
+      markdownInput.addEventListener('keydown', async function (e) {
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+          e.preventDefault();
+          await undo();
+        } else if (e.key === 'Enter') {
+          e.preventDefault();
+          let text = markdownInput.value;
+          let cursorPos = markdownInput.selectionStart;
+          let before = text.substring(0, cursorPos);
+          let after = text.substring(cursorPos);
+          let lineStart = before.lastIndexOf('\n') + 1;
+          let currentLine = before.substring(lineStart);
+          let newLinePrefix = '';
+          let headingMatch = currentLine.match(/^(\s*#+\s+)/);
+          let bulletMatch = currentLine.match(/^(\s*[-+*]\s+)/);
+          if (headingMatch) {
+            let hashes = headingMatch[1].trim();
+            if (hashes.length < 6) newLinePrefix = headingMatch[1] + '# ';
+            else newLinePrefix = '  - ';
+          } else if (bulletMatch) {
+            let currentLevel = bulletMatch[1].length / 2 + 1;
+            let newLevel = (currentLevel < 6) ? currentLevel + 1 : 6;
+            newLinePrefix = '  '.repeat(newLevel - 1) + '- ';
+          } else newLinePrefix = '- ';
+          let insertText = '\n' + newLinePrefix;
+          let newPos = cursorPos + insertText.length;
+          markdownInput.value = before + insertText + after;
+          markdownInput.selectionStart = markdownInput.selectionEnd = newPos;
+          markdownInput.dispatchEvent(new Event('input'));
+        }
+      });
+      markdownInput.addEventListener('input', (e) => {
+        if (!isUpdatingFromMap) {
+          updateMindmap(markdownInput.value);
+        }
+      });
+
+      function parseLine(line) {
+        let spaces = 0, i = 0;
+        while (i < line.length && (line[i] === ' ' || line[i] === '\t')) {
+          spaces += (line[i] === '\t') ? 2 : 1;
+          i++;
+        }
+        line = line.trimStart();
+        const headingMatch = line.match(/^(#{1,6})\s+(.*)/);
+        if (headingMatch) {
+          return { isHeading: true, headingLevel: headingMatch[1].length, bulletLevel: 0, text: headingMatch[2].trim() };
+        }
+        const bulletMatch = line.match(/^([-+*])\s+(.*)/);
+        if (bulletMatch) {
+          return { isHeading: false, headingLevel: 0, bulletLevel: Math.floor(spaces / 2) + 1, text: bulletMatch[2].trim() };
+        }
+        if (line.trim().length > 0) {
+          return { isHeading: false, headingLevel: 0, bulletLevel: 1, text: line.trim() };
+        }
+        return null;
+      }
+      function parseTableBlock(lines, startIndex) {
+        let tableLines = [], currentIndex = startIndex;
+        while (currentIndex < lines.length) {
+          const lineTrim = lines[currentIndex].trim();
+          if (lineTrim.startsWith('|') && lineTrim.split('|').length > 2) {
+            tableLines.push(lineTrim);
+            currentIndex++;
+          } else break;
+        }
+        if (tableLines.length === 0) return { tableHTML: '', rowCount: 0 };
+        const headerLine = tableLines[0];
+        const headerCells = headerLine.split('|').slice(1, -1).map(c => c.trim());
+        let bodyStartIndex = 1;
+        if (tableLines.length > 1) {
+          const secondLine = tableLines[1].trim();
+          if (/^\|?[\s:-]+\|[\s:-\|]+$/.test(secondLine)) bodyStartIndex = 2;
+        }
+        const theadHTML = '<tr>' + headerCells.map(c => `<th>${c}</th>`).join('') + '</tr>';
+        let tbodyHTML = '';
+        for (let i = bodyStartIndex; i < tableLines.length; i++) {
+          const rowCells = tableLines[i].split('|').slice(1, -1).map(c => c.trim());
+          tbodyHTML += '<tr>' + rowCells.map(c => `<td>${c}</td>`).join('') + '</tr>';
+        }
+        const tableHTML = `
+          <table style="border-collapse: collapse; margin: auto;">
+            <thead style="background-color: #efefef;">${theadHTML}</thead>
+            <tbody>${tbodyHTML}</tbody>
+          </table>
+        `;
+        return { tableHTML, rowCount: tableLines.length };
+      }
+      function parseMarkdownPersonalizado(markdown) {
+        const lines = markdown.split('\n');
+        let rootText = 'Root', rootFoundAt = -1;
+        for (let i = 0; i < lines.length; i++) {
+          const p = parseLine(lines[i]);
+          if (p && p.isHeading && p.headingLevel === 1) {
+            rootText = p.text;
+            rootFoundAt = i;
+            break;
+          }
+        }
+        const root = { id: generateId(), text: rootText, children: [] };
+        const stack = [{ level: 1, node: root }];
+        let lastHeadingLevel = 1;
+        for (let i = 0; i < lines.length; i++) {
+          if (i === rootFoundAt) continue;
+          const lineTrim = lines[i].trim();
+          if (lineTrim.startsWith('|') && lineTrim.split('|').length > 2) {
+            const { tableHTML, rowCount } = parseTableBlock(lines, i);
+            if (tableHTML && rowCount > 0) {
+              const finalLevel = lastHeadingLevel + 1;
+              const newNode = { id: generateId(), text: '', html: tableHTML, isTable: true, children: [] };
+              while (stack.length > 1 && stack[stack.length - 1].level >= finalLevel) { stack.pop(); }
+              stack[stack.length - 1].node.children.push(newNode);
+              stack.push({ level: finalLevel, node: newNode });
+              i += rowCount - 1;
+              continue;
+            }
+          }
+          const p = parseLine(lines[i]);
+          if (!p) continue;
+          let finalLevel;
+          if (p.isHeading) {
+            finalLevel = p.headingLevel;
+            lastHeadingLevel = finalLevel;
+          } else {
+            finalLevel = lastHeadingLevel + p.bulletLevel;
+          }
+          const newNode = { id: generateId(), text: p.text, children: [] };
+          while (stack.length > 1 && stack[stack.length - 1].level >= finalLevel) { stack.pop(); }
+          stack[stack.length - 1].node.children.push(newNode);
+          stack.push({ level: finalLevel, node: newNode });
+        }
+        return root;
+      }
+
+      function setParentRefs(node, parent = null) {
+        node.parent = parent;
+        (node.children || []).forEach(child => setParentRefs(child, node));
+      }
+      function processMarkdownNode(node) {
+        const mdContent = node.text.replace(/^#markdown\s*/, '');
+        const parsed = parseMarkdownPersonalizado(mdContent);
+        node.children = parsed.children;
+        setParentRefs(node, node.parent);
+      }
+
+      let colorIndex = 0;
+      const whimsicalColors = [
+        '#be48d1', '#0046f5', '#4faf65', '#f7c346', '#6e2761',
+        '#ed3b54', '#4bafa0', '#fc7416', '#4449ff', '#9b9b9b'
+      ];
+      function createMeasurementNode(content, colorClass = '', isHTML = false) {
+        const container = document.getElementById('measurement');
+        const div = document.createElement('div');
+        div.className = `node ${colorClass}`;
+        div.style.position = 'static';
+        div.style.visibility = 'hidden';
+        div.style.userSelect = 'none';
+        div.style.webkitUserSelect = 'none';
+        div.style.webkitTouchCallout = 'none';
+        if (isHTML) { div.innerHTML = content; }
+        else { div.textContent = content; }
+        container.appendChild(div);
+        const w = div.offsetWidth, h = div.offsetHeight;
+        container.removeChild(div);
+        return { width: w, height: h };
+      }
+      function measureTree(nodeData, level = 0, subtreeColor = null) {
+        if (level === 1 && !subtreeColor) {
+          subtreeColor = whimsicalColors[colorIndex % whimsicalColors.length];
+          colorIndex++;
+        }
+        let colorClass = '';
+        if (subtreeColor) {
+          const idx = whimsicalColors.indexOf(subtreeColor);
+          colorClass = (idx >= 0) ? `color-${idx + 1}` : 'color-1';
+        }
+        let contentToMeasure = nodeData.text;
+        let useHTML = false;
+        if (nodeData.isTable) {
+          contentToMeasure = nodeData.html;
+          useHTML = true;
+        }
+        const { width, height } = createMeasurementNode(contentToMeasure, colorClass, useHTML);
+        nodeData.width = width;
+        nodeData.height = height;
+        nodeData.subtreeColor = subtreeColor;
+        (nodeData.children || []).forEach(ch => measureTree(ch, level + 1, subtreeColor));
+      }
+      function calculateHeight(nodeData, spacingY) {
+        if (!nodeData.children || nodeData.children.length === 0) return nodeData.height;
+        let total = 0;
+        nodeData.children.forEach((child, idx) => {
+          const cH = calculateHeight(child, spacingY);
+          total += cH;
+          if (idx < nodeData.children.length - 1) total += spacingY;
+        });
+        return Math.max(total, nodeData.height);
+      }
+      function layoutTree(nodeData, x, y, spacingX, spacingY) {
+        nodeData.x = x;
+        nodeData.y = y - nodeData.height / 2;
+        const totalH = calculateHeight(nodeData, spacingY);
+        let childYStart = y - totalH / 2;
+        (nodeData.children || []).forEach(child => {
+          const cH = calculateHeight(child, spacingY);
+          const centerY = childYStart + cH / 2;
+          layoutTree(child, x + spacingX + nodeData.width + 100, centerY, spacingX, spacingY);
+          childYStart += cH + spacingY;
+        });
+      }
+      function createCurveLine(x1, y1, x2, y2, color) {
+        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        path.setAttribute('stroke', color);
+        path.setAttribute('fill', 'none');
+        path.setAttribute('stroke-width', '4');
+        const midX = (x1 + x2) / 2;
+        const d = `M ${x1} ${y1} C ${midX} ${y1}, ${midX} ${y2}, ${x2} ${y2}`;
+        path.setAttribute('d', d);
+        mindmapLines.appendChild(path);
+      }
+      function findDimensions(node, dims) {
+        if (node.x < dims.minX) dims.minX = node.x;
+        if (node.y < dims.minY) dims.minY = node.y;
+        if (node.x + node.width > dims.maxX) dims.maxX = node.x + node.width;
+        if (node.y + node.height > dims.maxY) dims.maxY = node.y + node.height;
+        (node.children || []).forEach(child => findDimensions(child, dims));
+        return dims;
+      }
+      function shiftNodes(node, shiftX, shiftY) {
+        node.x += shiftX;
+        node.y += shiftY;
+        (node.children || []).forEach(child => shiftNodes(child, shiftX, shiftY));
+      }
+
+      const nodeElementMap = new WeakMap();
+      function renderTree(nodeData, parentNode = null) {
+        const nd = document.createElement('div');
+        nd.className = 'node';
+        if (nodeData.subtreeColor) {
+          const idx = whimsicalColors.indexOf(nodeData.subtreeColor);
+          const colorClass = (idx >= 0) ? `color-${idx + 1}` : 'color-1';
+          nd.classList.add(colorClass);
+        }
+        nd.style.left = nodeData.x + 'px';
+        nd.style.top = nodeData.y + 'px';
+        if (nodeData.isTable) nd.innerHTML = nodeData.html;
+        else nd.textContent = nodeData.text;
+        mindmapContent.appendChild(nd);
+        nodeElementMap.set(nodeData, nd);
+        nd.style.userSelect = 'none';
+        nd.style.webkitUserSelect = 'none';
+        nd.style.webkitTouchCallout = 'none';
+
+        nd.addEventListener('mousedown', (e) => {
+          if (e.button === 0) {
+            e.stopPropagation();
+            activeNode = nodeData;
+            initDrag(e, nodeData, nd);
+          }
+        });
+
+        // Doble clic/toque para menú contextual
+        nd.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const currentTime = new Date().getTime();
+          if (lastClickedNode === nodeData && (currentTime - lastClickTime) < DOUBLE_CLICK_DELAY) {
+            activeNode = nodeData;
+            openContextMenuForNode(nodeData);
+            lastClickTime = 0;
+            lastClickedNode = null;
+          } else {
+            lastClickTime = currentTime;
+            lastClickedNode = nodeData;
+          }
+        });
+
+        // Touch events ajustados
+        nd.addEventListener('touchstart', (e) => {
+          e.stopPropagation();
+          if (e.touches.length === 1) {
+            // Solo iniciar arrastre con toque sostenido
+            touchDragTimer = setTimeout(() => {
+              const touch = e.touches[0];
+              activeNode = nodeData;
+              initDrag({ clientX: touch.clientX, clientY: touch.clientY }, nodeData, nd);
+              isTouchDragging = true;
+            }, 300);
+          }
+        }, { passive: false });
+
+        nd.addEventListener('touchmove', (e) => {
+          e.preventDefault();
+          if (e.touches.length === 1 && isTouchDragging) {
+            const touch = e.touches[0];
+            doDrag({ clientX: touch.clientX, clientY: touch.clientY });
+          } else if (e.touches.length === 2 && isTouchDragging) {
+            // Scroll con el segundo dedo
+            const scrollTouch = e.touches[1];
+            const dx = scrollTouch.clientX - lastScrollTouch.x;
+            const dy = scrollTouch.clientY - lastScrollTouch.y;
+            mindmapContainer.scrollLeft -= dx;
+            mindmapContainer.scrollTop -= dy;
+            lastScrollTouch = { x: scrollTouch.clientX, y: scrollTouch.clientY };
+            isScrolling = true;
+
+            // Actualizar posición del nodo arrastrado
+            const dragTouch = e.touches[0];
+            doDrag({ clientX: dragTouch.clientX, clientY: dragTouch.clientY });
+          }
+        }, { passive: false });
+
+        nd.addEventListener('touchend', (e) => {
+          e.preventDefault(); // Prevenir comportamiento predeterminado como zoom
+          clearTimeout(touchDragTimer);
+          if (isTouchDragging) {
+            const touch = e.changedTouches[0];
+            endDrag({ clientX: touch.clientX, clientY: touch.clientY });
+            isTouchDragging = false;
+            isScrolling = false;
+          } else {
+            // Manejar toque simple como clic
+            const currentTime = new Date().getTime();
+            if (lastClickedNode === nodeData && (currentTime - lastClickTime) < DOUBLE_CLICK_DELAY) {
+              activeNode = nodeData;
+              openContextMenuForNode(nodeData);
+              lastClickTime = 0;
+              lastClickedNode = null;
+            } else {
+              lastClickTime = currentTime;
+              lastClickedNode = nodeData;
+            }
+          }
+        }, { passive: false });
+
+        if (parentNode) {
+          createCurveLine(
+            parentNode.x + parentNode.width,
+            parentNode.y + parentNode.height / 2,
+            nodeData.x,
+            nodeData.y + nodeData.height / 2,
+            parentNode.subtreeColor || '#999'
+          );
+        }
+        (nodeData.children || []).forEach(child => renderTree(child, nodeData));
+      }
+
+      const btnEdit = document.getElementById('btn-edit');
+      const btnAdd = document.getElementById('btn-add');
+      const btnRemove = document.getElementById('btn-remove');
+      const btnPromote = document.getElementById('btn-promote');
+
+      btnEdit.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (activeNode) {
+          const el = nodeElementMap.get(activeNode);
+          if (el) openEditingUI(el, activeNode);
+        }
+        closeContextMenu();
+      });
+      btnAdd.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        if (activeNode) await addChildNode(activeNode);
+        closeContextMenu();
+      });
+      btnRemove.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        if (activeNode) await removeNode(activeNode);
+        closeContextMenu();
+      });
+      btnPromote.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        if (activeNode && activeNode.parent && activeNode.parent.parent) {
+          await pushUndoState();
+          const siblings = activeNode.parent.children;
+          const index = siblings.indexOf(activeNode);
+          if (index !== -1) siblings.splice(index, 1);
+          const grandparent = activeNode.parent.parent;
+          activeNode.parent = grandparent;
+          grandparent.children.push(activeNode);
+          renderAll();
+        }
+        closeContextMenu();
+      });
+
+      async function addChildNode(parentNode) {
+        await pushUndoState();
+        const newChild = { id: generateId(), text: 'Nuevo nodo', children: [] };
+        newChild.parent = parentNode;
+        parentNode.children.push(newChild);
+        activeNode = newChild;
+        renderAll();
+        const newNodeElement = nodeElementMap.get(newChild);
+        if (newNodeElement) {
+          openEditingUI(newNodeElement, newChild);
+          const input = newNodeElement.querySelector('input');
+          if (input) input.focus();
+        }
+        scrollAndHighlightNodeBriefly(newChild);
+      }
+      async function removeNode(node) {
+        if (!node.parent) {
+          alert('No se puede eliminar el nodo raíz');
+          return;
+        }
+        await pushUndoState();
+        const siblings = node.parent.children;
+        const index = siblings.indexOf(node);
+        if (index !== -1) siblings.splice(index, 1);
+        activeNode = node.parent;
+        renderAll();
+        scrollAndHighlightNodeBriefly(activeNode);
+      }
+
+      function openEditingUI(div, node) {
+        activeNode = node;
+        const oldText = node.text;
+        div.innerHTML = '';
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.value = oldText;
+        input.className = 'edit-input';
+        div.appendChild(input);
+        input.focus();
+        input.select();
+        input.addEventListener('keydown', async (e) => {
+          if (e.key === 'Enter') {
+            if (input.value.trim() !== oldText) await pushUndoState();
+            node.text = input.value.trim();
+            if (node.text.startsWith('#markdown')) {
+              processMarkdownNode(node);
+            }
+            renderAll();
+            scrollAndHighlightNodeBriefly(node);
+          } else if (e.key === 'Escape') {
+            node.text = oldText;
+            renderAll();
+            scrollAndHighlightNodeBriefly(node);
+          }
+        });
+        input.addEventListener('blur', async () => {
+          if (input.value.trim() !== oldText) await pushUndoState();
+          node.text = input.value.trim();
+          if (node.text.startsWith('#markdown')) {
+            processMarkdownNode(node);
+          }
+          renderAll();
+          scrollAndHighlightNodeBriefly(node);
+        });
+      }
+
+      function serializeTreeToMarkdown(node, level = 0) {
+        let lines = [];
+        let indent = (level === 0) ? '# ' : '  '.repeat(level) + '- ';
+        lines.push(indent + node.text);
+        markdownMapping[node.id] = lines.length - 1;
+        if (node.children) {
+          node.children.forEach(child => {
+            lines = lines.concat(serializeTreeToMarkdown(child, level + 1));
+          });
+        }
+        return lines;
+      }
+      function updateMarkdownEditorFromTree() {
+        if (document.activeElement === markdownInput) return;
+        isUpdatingFromMap = true;
+        const currentScroll = markdownInput.scrollTop;
+        markdownMapping = {};
+        let lines = serializeTreeToMarkdown(rootData, 0).join('\n');
+        markdownInput.value = lines;
+        markdownInput.scrollTop = currentScroll;
+        isUpdatingFromMap = false;
+      }
+      function scrollAndHighlightNodeBriefly(node) {
+        if (!node || markdownMapping[node.id] === undefined) return;
+        scrollMarkdownToNode(node);
+        highlightNodeTemporarily(node);
+      }
+      function scrollMarkdownToNode(node) {
+        if (!node || markdownMapping[node.id] === undefined) return;
+        let lineNum = markdownMapping[node.id];
+        let style = window.getComputedStyle(markdownInput);
+        let lineHeight = parseFloat(style.lineHeight) || 20;
+        let paddingTop = parseFloat(style.paddingTop) || 10;
+        let headerHeight = document.querySelector('#markdown-editor header').offsetHeight || 30;
+        let targetScroll = lineNum * lineHeight - markdownInput.clientHeight / 2 + lineHeight / 2 + paddingTop;
+        markdownInput.scrollTop = targetScroll;
+      }
+      function highlightNodeTemporarily(node) {
+        if (!node || markdownMapping[node.id] === undefined) return;
+        const lineNum = markdownMapping[node.id];
+        const headerHeight = document.querySelector('#markdown-editor header').offsetHeight || 30;
+        let lineHeight = parseFloat(window.getComputedStyle(markdownInput).lineHeight) || 20;
+        let paddingTop = parseFloat(window.getComputedStyle(markdownInput).paddingTop) || 10;
+        let scrollTop = markdownInput.scrollTop;
+        let position = lineNum * lineHeight + paddingTop - scrollTop + headerHeight;
+        let height = lineHeight;
+        highlightOverlay.style.top = position + 'px';
+        highlightOverlay.style.left = '0';
+        highlightOverlay.style.width = '100%';
+        highlightOverlay.style.height = height + 'px';
+        highlightOverlay.classList.add('active');
+        setTimeout(() => {
+          highlightOverlay.classList.remove('active');
+          highlightOverlay.style.height = '0';
+        }, 1500);
+      }
+
+      // Drag & Drop con scroll manual
+      function initDrag(e, nodeData, nodeElement) {
+        dragNode = { data: nodeData, element: nodeElement };
+        const rect = nodeElement.getBoundingClientRect();
+        dragOffset.x = e.clientX - rect.left;
+        dragOffset.y = e.clientY - rect.top;
+        nodeElement.classList.add('dragging');
+        nodeElement.style.transition = 'none';
+      }
+
+      function doDrag(e) {
+        if (!dragNode) return;
+        const containerRect = mindmapContainer.getBoundingClientRect();
+        const newX = e.clientX - containerRect.left + mindmapContainer.scrollLeft - dragOffset.x;
+        const newY = e.clientY - containerRect.top + mindmapContainer.scrollTop - dragOffset.y;
+        
+        dragNode.element.style.left = newX + 'px';
+        dragNode.element.style.top = newY + 'px';
+        dragNode.data.x = newX;
+        dragNode.data.y = newY;
+        
+        updateGhostRope();
+      }
+
+      async function endDrag(e) {
+        if (!dragNode) return;
+        dragNode.element.classList.remove('dragging');
+        dragNode.element.style.transition = 'border 0.2s ease, opacity 0.2s ease';
+        
+        const containerRect = mindmapContainer.getBoundingClientRect();
+        const newX = e.clientX - containerRect.left + mindmapContainer.scrollLeft - dragOffset.x;
+        const newY = e.clientY - containerRect.top + mindmapContainer.scrollTop - dragOffset.y;
+        dragNode.data.x = newX;
+        dragNode.data.y = newY;
+
+        const nearest = findNearestNode(dragNode.data, 150);
+        if (nearest && nearest !== dragNode.data && !isAncestor(dragNode.data, nearest)) {
+          if (dragNode.data.parent) {
+            const siblings = dragNode.data.parent.children;
+            const idx = siblings.indexOf(dragNode.data);
+            if (idx >= 0) siblings.splice(idx, 1);
+          }
+          dragNode.data.parent = nearest;
+          nearest.children.push(dragNode.data);
+        }
+        
+        await pushUndoState();
+        dragNode = null;
+        removeGhostRope();
+        renderAll();
+        scrollAndHighlightNodeBriefly(activeNode);
+      }
+
+      document.addEventListener('mousemove', doDrag);
+      document.addEventListener('mouseup', endDrag);
+
+      // Scroll manual con segundo dedo
+      document.addEventListener('touchstart', (e) => {
+        if (e.touches.length === 2 && isTouchDragging) {
+          lastScrollTouch = { x: e.touches[1].clientX, y: e.touches[1].clientY };
+          isScrolling = true;
+        }
+      }, { passive: false });
+
+      function updateGhostRope() {
+        const threshold = 150;
+        const candidate = findNearestNode(dragNode.data, threshold);
+        let ghost = document.getElementById('ghost-rope');
+        if (candidate) {
+          if (!ghost) {
+            ghost = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            ghost.id = 'ghost-rope';
+            ghost.setAttribute('stroke', 'rgba(0,0,0,0.5)');
+            ghost.setAttribute('stroke-width', '2');
+            ghost.setAttribute('fill', 'none');
+            ghost.setAttribute('stroke-dasharray', '5,5');
+            mindmapLines.appendChild(ghost);
+          }
+          const draggedCenterX = dragNode.data.x + dragNode.data.width / 2;
+          const draggedCenterY = dragNode.data.y + dragNode.data.height / 2;
+          const candidateCenterX = candidate.x + candidate.width / 2;
+          const candidateCenterY = candidate.y + candidate.height / 2;
+          const midX = (draggedCenterX + candidateCenterX) / 2;
+          const pathData = `M ${draggedCenterX} ${draggedCenterY} C ${midX} ${draggedCenterY}, ${midX} ${candidateCenterY}, ${candidateCenterX} ${candidateCenterY}`;
+          ghost.setAttribute('d', pathData);
+        } else {
+          if (ghost) ghost.remove();
+        }
+      }
+      function removeGhostRope() {
+        const ghost = document.getElementById('ghost-rope');
+        if (ghost) ghost.remove();
+      }
+
+      function findNearestNode(dragData, threshold) {
+        const all = [];
+        (function traverse(node) {
+          all.push(node);
+          (node.children || []).forEach(child => traverse(child));
+        })(rootData);
+        let best = null, bestDist = Infinity;
+        all.forEach(n => {
+          if (n === dragData) return;
+          const cx1 = n.x + n.width / 2, cy1 = n.y + n.height / 2;
+          const cx2 = dragData.x + dragData.width / 2, cy2 = dragData.y + dragData.height / 2;
+          const dx = cx1 - cx2, dy = cy1 - cy2;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist < bestDist) { bestDist = dist; best = n; }
+        });
+        return (bestDist <= threshold) ? best : null;
+      }
+      function isAncestor(target, candidate) {
+        let p = candidate.parent;
+        while (p) {
+          if (p === target) return true;
+          p = p.parent;
+        }
+        return false;
+      }
+
+      function updateMindmap(markdown) {
+        rootData = parseMarkdownPersonalizado(markdown || '# Root');
+        setParentRefs(rootData, null);
+        renderAll();
+      }
+      function renderAll() {
+        const oldScrollX = mindmapContainer.scrollLeft;
+        const oldScrollY = mindmapContainer.scrollTop;
+        colorIndex = 0;
+        mindmapContent.innerHTML = '';
+        mindmapLines.innerHTML = '';
+
+        measureTree(rootData);
+        layoutTree(rootData, 0, 0, 50, 60);
+
+        const dims = { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity };
+        findDimensions(rootData, dims);
+        const padding = 100;
+        const offsetX = (dims.minX < padding) ? (padding - dims.minX) : padding;
+        const offsetY = (dims.minY < padding) ? (padding - dims.minY) : padding;
+        if (offsetX !== 0 || offsetY !== 0) shiftNodes(rootData, offsetX, offsetY);
+
+        const newDims = { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity };
+        findDimensions(rootData, newDims);
+
+        const containerPadding = 500;
+        const extraSpaceBelow = 800;
+        const finalWidth = newDims.maxX + containerPadding;
+        const finalHeight = newDims.maxY + containerPadding + extraSpaceBelow;
+        mindmapContent.style.width = finalWidth + 'px';
+        mindmapContent.style.height = finalHeight + 'px';
+        mindmapLines.setAttribute('width', finalWidth + 'px');
+        mindmapLines.setAttribute('height', finalHeight + 'px');
+
+        renderTree(rootData);
+        mindmapContainer.scrollTo(oldScrollX, oldScrollY);
+        updateMarkdownEditorFromTree();
+      }
+
+      if (!markdownInput.value.trim()) {
+        markdownInput.value = "# Root";
+      }
+      updateMindmap(markdownInput.value);
+
+      mindmapContainer.addEventListener('scroll', function () {
+        const topPos = this.scrollTop + 10;
+        const toolbar = document.getElementById('mobile-toolbar');
+        const leftPos = this.scrollLeft + this.clientWidth - toolbar.offsetWidth - 10;
+        toolbar.style.top = topPos + 'px';
+        toolbar.style.left = leftPos + 'px';
+        if (contextMenuOpen && contextMenuNode) {
+          positionContextMenu(contextMenuNode);
+        }
+      });
+    </script>
+  </body>
+</html>
